@@ -29,6 +29,9 @@
 #include <linux/mempolicy.h>
 #include <linux/migrate.h>
 #include <linux/task_work.h>
+#ifdef CONFIG_SCHED_HMP
+#include <linux/proc_fs.h>
+#endif
 
 #include <trace/events/sched.h>
 
@@ -1228,6 +1231,7 @@ static inline void decay_scaled_stat(struct sched_avg *sa, u64 periods);
 unsigned int __read_mostly sched_init_task_load_pelt;
 unsigned int __read_mostly sched_init_task_load_windows;
 unsigned int __read_mostly sysctl_sched_init_task_load_pct = 15;
+unsigned int sched_orig_load_balance_enable;
 
 static inline unsigned int task_load(struct task_struct *p)
 {
@@ -4748,8 +4752,10 @@ select_task_rq_fair(struct task_struct *p, int sd_flag, int wake_flags)
 	if (p->nr_cpus_allowed == 1)
 		return prev_cpu;
 
-	if (sched_enable_hmp)
-		return select_best_cpu(p, prev_cpu, 0, sync);
+	if (!sched_orig_load_balance_enable){
+		if (sched_enable_hmp)
+			return select_best_cpu(p, prev_cpu, 0, sync);
+	}
 
 	if (sd_flag & SD_BALANCE_WAKE) {
 		if (cpumask_test_cpu(cpu, tsk_cpus_allowed(p)))
@@ -7964,5 +7970,74 @@ __init void init_sched_fair_class(void)
 	cpu_notifier(sched_ilb_notifier, 0);
 #endif
 #endif /* SMP */
+}
+#ifdef CONFIG_SCHED_HMP
+static ssize_t write_sched_orig_load_balance_enable(struct file *file, const char __user *buf,
+									size_t count, loff_t *ppos)
+{
+
+#if defined(CONFIG_ARCH_MSM8939)|| defined (CONFIG_ARCH_MSM8929)
+	sched_orig_load_balance_enable = 0;
+	return count;
+#endif
+
+	if (count) {
+		char c;
+		if(get_user(c, buf))
+			return -EFAULT;
+		if(c!='1' && c!='0'){
+			pr_err("Wrong value write to node\n");
+			return -EINVAL;
+		}
+	if(!sched_enable_hmp){
+		pr_err("Sched_enable_hmp must be turned on\n");
+		sched_orig_load_balance_enable=0;
+		return count;
+	}
+
+	if(c == '1')
+		sched_orig_load_balance_enable=1;
+	else
+		sched_orig_load_balance_enable=0;
+	}
+
+	return count;
 
 }
+
+static ssize_t read_sched_orig_load_balance_enable( struct file *filp, char *buf,
+									size_t count, loff_t *f_pos )
+{
+	char procfs_buffer[64];
+	ssize_t length;
+
+	length = scnprintf(procfs_buffer, 12, "%d\n", sched_orig_load_balance_enable);
+	return simple_read_from_buffer(buf, count, f_pos, procfs_buffer, length);
+}
+
+static const struct file_operations proc_sched_orig_load_balance_enable_operations = {
+	.write	=	write_sched_orig_load_balance_enable,
+	.read	=	read_sched_orig_load_balance_enable,
+	.llseek	=	noop_llseek,
+};
+static __init int init_sched_orig_load_balance_enable(void)
+{
+
+#if defined(CONFIG_ARCH_MSM8939)|| defined (CONFIG_ARCH_MSM8929)
+	sched_orig_load_balance_enable = 0;
+	return 0;
+#endif
+
+	if(!proc_create("sched_orig_load_balance_enable",S_IWUSR|S_IWGRP, NULL,
+					&proc_sched_orig_load_balance_enable_operations))
+		pr_err("Failed to register proc interface\n");
+	if(!sched_enable_hmp){
+		pr_err("Sched_enable_hmp must be turned on\n");
+		sched_orig_load_balance_enable=0;
+		return 0;
+	}
+	sched_orig_load_balance_enable=1;
+	return 0;
+}
+late_initcall(init_sched_orig_load_balance_enable);
+#endif
