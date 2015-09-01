@@ -43,6 +43,7 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev)
 
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	int i = 0;
+	int j = 0;
 
 	if (!pdev) {
 		pr_err("%s: invalid input\n", __func__);
@@ -59,11 +60,16 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev)
 		rc = msm_dss_config_vreg(&pdev->dev,
 			ctrl_pdata->power_data[i].vreg_config,
 			ctrl_pdata->power_data[i].num_vreg, 1);
-		if (rc)
+		if (rc) {
 			pr_err("%s: failed to init vregs for %s\n",
 				__func__, __mdss_dsi_pm_name(i));
+			for (j = i-1; j >= 0; j--) {
+				msm_dss_config_vreg(&pdev->dev,
+				ctrl_pdata->power_data[j].vreg_config,
+				ctrl_pdata->power_data[j].num_vreg, 0);
+			}
+		}
 	}
-
 	return rc;
 }
 
@@ -1299,6 +1305,7 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 							pdata);
 		break;
 	case MDSS_EVENT_UNBLANK:
+		mdss_dsi_get_hw_revision(ctrl_pdata);
 		if (ctrl_pdata->on_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_unblank(pdata);
 		break;

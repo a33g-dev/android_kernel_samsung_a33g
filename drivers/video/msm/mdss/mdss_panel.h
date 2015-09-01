@@ -182,8 +182,6 @@ struct mdss_intf_recovery {
  *				- 1: update to command mode
  * @MDSS_EVENT_REGISTER_RECOVERY_HANDLER: Event to recover the interface in
  *					case there was any errors detected.
- * @MDSS_EVENT_INTF_RESTORE: Event to restore the interface in case there
- *				was any errors detected during normal operation.
  */
 enum mdss_intf_events {
 	MDSS_EVENT_RESET = 1,
@@ -289,7 +287,7 @@ struct mipi_panel_info {
 	/* The packet-size should not bet changed */
 	char no_max_pkt_size;
 	/* Clock required during LP commands */
-	char force_clk_lane_hs;
+	bool force_clk_lane_hs;
 
 	char vsync_enable;
 	char hw_vsync_mode;
