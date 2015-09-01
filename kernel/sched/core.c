@@ -82,6 +82,9 @@
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
 #endif
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
 
 #include "sched.h"
 #include "../workqueue_internal.h"
@@ -2961,13 +2964,13 @@ void scheduler_ipi(void)
 			&& !got_boost_kick())
 		return;
 
-	if (got_boost_kick()) {
-		struct rq *rq = cpu_rq(cpu);
-
-		if (rq->curr->sched_class == &fair_sched_class)
-			check_for_migration(rq, rq->curr);
-		clear_boost_kick(cpu);
-	}
+	if (!sched_orig_load_balance_enable)
+		if (got_boost_kick()) {
+			struct rq *rq = cpu_rq(cpu);
+			if (rq->curr->sched_class == &fair_sched_class)
+				check_for_migration(rq, rq->curr);
+			clear_boost_kick(cpu);
+		}
 
 
 	/*
@@ -3722,6 +3725,13 @@ unsigned long this_cpu_load(void)
 	return this->cpu_load[0];
 }
 
+#ifdef CONFIG_RUNTIME_COMPCACHE
+unsigned long this_cpu_loadx(int i)
+{
+	struct rq *this = this_rq();
+	return this->cpu_load[i];
+}
+#endif /* CONFIG_RUNTIME_COMPCACHE */
 
 /*
  * Global load-average calculations
@@ -4402,8 +4412,9 @@ void scheduler_tick(void)
 	trigger_load_balance(rq, cpu);
 #endif
 	rq_last_tick_reset(rq);
-	if (curr->sched_class == &fair_sched_class)
-		check_for_migration(rq, curr);
+	if (!sched_orig_load_balance_enable)
+		if (curr->sched_class == &fair_sched_class)
+			check_for_migration(rq, curr);
 }
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -4690,6 +4701,10 @@ need_resched:
 		 */
 		cpu = smp_processor_id();
 		rq = cpu_rq(cpu);
+#ifdef CONFIG_SEC_DEBUG
+		sec_debug_task_sched_log(cpu, rq->curr);
+#endif
+
 	} else
 		raw_spin_unlock_irq(&rq->lock);
 
